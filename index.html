@@ -1,93 +1,156 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
+    <meta charset="UTF-8">
     <title>Magazine Flipbook</title>
     <style>
         body {
             margin: 0;
-            background: #222;
+            padding: 0;
+            background: #333;
             overflow: hidden;
         }
-        #flipbook {
+        #magazine-container {
             width: 95vw;
             height: 90vh;
-            margin: auto;
+            margin: 20px auto;
         }
-        .page {
-            background: white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-        }
-        canvas {
-            display: block;
+        #magazine {
             width: 100%;
             height: 100%;
         }
+        .hard {
+            background: #222 !important;
+            color: white;
+            text-align: center;
+            font-size: 16px;
+            font-family: Arial, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .pdf-page {
+            background: white;
+        }
+        .loading-message {
+            color: white;
+            text-align: center;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
     </style>
-    <!-- Turn.js CSS -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/turn.js/4.1.0/turn.min.css" />
-</head>
-<body>
-    <div id="flipbook"></div>
-
-    <!-- jQuery (required by Turn.js) -->
+    <!-- jQuery is required for flipbook -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     
-    <!-- Turn.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/turn.js/4.1.0/turn.min.js"></script>
-    
-    <!-- PDF.js (using ES modules) -->
+    <!-- Turn.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/turn.js/3/turn.min.js"></script>
+</head>
+<body>
+    <div id="magazine-container">
+        <div id="magazine">
+            <div class="loading-message">Loading your flipbook... Please wait.</div>
+        </div>
+    </div>
+
     <script type="module">
-        // Import PDF.js as a module
-        import * as pdfjsLib from './pdfjs/pdf.mjs';
+        // Import PDF.js as a module from CDN since we had issues with local pdf.mjs
+        import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/+esm';
         
-        // Configure PDF.js worker
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        // Set up PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
         
-        const url = 'https://www.dropbox.com/scl/fi/cvqlv0785eps45pk2kqr3/flipbook.pdf?rlkey=5m3ja6w9gk5gy1hmfvmzseyo5&st=fe6gncp6&dl=0';
-
-        // Load PDF
-        pdfjsLib.getDocument(url).promise.then(pdf => {
-            const container = $('#flipbook');
-            const total = pdf.numPages;
-
-            // Create empty pages
-            for (let i = 1; i <= total; i++) {
-                container.append('<div class="page"><canvas id="page-'+i+'"></canvas></div>');
-            }
-
-            // Initialize Turn.js
-            container.turn({
-                width: container.width(),
-                height: container.height(),
-                autoCenter: true,
-                display: 'double',
-                gradients: true,
-                duration: 600
-            });
-
-            // Render each page
-            for (let i = 1; i <= total; i++) {
-                pdf.getPage(i).then(page => {
-                    const viewport = page.getViewport({ scale: 1.5 });
-                    const canvas = document.getElementById('page-'+i);
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
-                    page.render({
-                        canvasContext: canvas.getContext('2d'),
-                        viewport
+        // Use a sample PDF for initial testing
+        const pdfUrl = 'https://raw.githubusercontent.com/mozilla/pdf.js/master/web/compressed.tracemonkey-pldi-09.pdf';
+        
+        // Replace with your Dropbox URL when working:
+        // const pdfUrl = 'YOUR-DROPBOX-URL-WITH-DL=1';
+        
+        $(document).ready(function() {
+            // Load the PDF
+            const loadingTask = pdfjsLib.getDocument(pdfUrl);
+            
+            loadingTask.promise.then(function(pdf) {
+                console.log('PDF loaded successfully');
+                
+                // Clear the magazine
+                $('#magazine').empty();
+                
+                // Add hard cover
+                $('#magazine').append('<div class="hard"> Front Cover </div>');
+                
+                // Create a page for each PDF page
+                const numPages = pdf.numPages;
+                const pagePromises = [];
+                
+                for (let i = 1; i <= numPages; i++) {
+                    const pageDiv = $('<div class="pdf-page"></div>');
+                    $('#magazine').append(pageDiv);
+                    
+                    // Get page and render it
+                    const pagePromise = pdf.getPage(i).then(function(page) {
+                        const canvas = document.createElement('canvas');
+                        pageDiv.append(canvas);
+                        
+                        const viewport = page.getViewport({ scale: 1.5 });
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+                        
+                        return page.render({
+                            canvasContext: canvas.getContext('2d'),
+                            viewport: viewport
+                        }).promise;
                     });
+                    
+                    pagePromises.push(pagePromise);
+                }
+                
+                // Add back cover
+                $('#magazine').append('<div class="hard"> Back Cover </div>');
+                
+                // Initialize the flipbook after all pages have rendered
+                Promise.all(pagePromises).then(function() {
+                    $('#magazine').turn({
+                        width: $('#magazine-container').width(),
+                        height: $('#magazine-container').height(),
+                        autoCenter: true,
+                        display: 'double',
+                        acceleration: true,
+                        elevation: 50,
+                        gradients: true,
+                        when: {
+                            turning: function(e, page, view) {
+                                console.log('Turning to page ' + page);
+                            }
+                        }
+                    });
+                    
+                    // Resize handler
+                    $(window).resize(function() {
+                        $('#magazine').turn('size', 
+                            $('#magazine-container').width(),
+                            $('#magazine-container').height()
+                        );
+                    });
+                    
+                    // Double-click for fullscreen
+                    $('#magazine-container').dblclick(function() {
+                        if (!document.fullscreenElement) {
+                            document.documentElement.requestFullscreen();
+                        } else {
+                            document.exitFullscreen();
+                        }
+                    });
+                    
+                    console.log('Flipbook initialized successfully');
+                }).catch(function(error) {
+                    console.error('Error rendering pages:', error);
+                    $('#magazine').html('<div class="loading-message">Error rendering pages. Please check console for details.</div>');
                 });
-            }
-        });
-
-        // Fullscreen on double-click
-        document.getElementById('flipbook').addEventListener('dblclick', () => {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen();
-            } else {
-                document.exitFullscreen();
-            }
+                
+            }).catch(function(error) {
+                console.error('Error loading PDF:', error);
+                $('#magazine').html('<div class="loading-message">Error loading PDF. Please check console for details.</div>');
+            });
         });
     </script>
 </body>
