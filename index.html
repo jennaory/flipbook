@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Magazine Flipbook</title>
+    <style>
+        body {
+            margin: 0;
+            background: #222;
+            overflow: hidden;
+        }
+        #flipbook {
+            width: 95vw;
+            height: 90vh;
+            margin: auto;
+        }
+        .page {
+            background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+    <!-- Turn.js CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/turn.js/4.1.0/turn.min.css" />
+</head>
+<body>
+    <div id="flipbook"></div>
+
+    <!-- jQuery (required by Turn.js) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- Turn.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/turn.js/4.1.0/turn.min.js"></script>
+    
+    <!-- PDF.js (using ES modules) -->
+    <script type="module">
+        // Import PDF.js as a module
+        import * as pdfjsLib from './pdfjs/pdf.mjs';
+        
+        // Configure PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        const url = 'flipbook.pdf';
+
+        // Load PDF
+        pdfjsLib.getDocument(url).promise.then(pdf => {
+            const container = $('#flipbook');
+            const total = pdf.numPages;
+
+            // Create empty pages
+            for (let i = 1; i <= total; i++) {
+                container.append('<div class="page"><canvas id="page-'+i+'"></canvas></div>');
+            }
+
+            // Initialize Turn.js
+            container.turn({
+                width: container.width(),
+                height: container.height(),
+                autoCenter: true,
+                display: 'double',
+                gradients: true,
+                duration: 600
+            });
+
+            // Render each page
+            for (let i = 1; i <= total; i++) {
+                pdf.getPage(i).then(page => {
+                    const viewport = page.getViewport({ scale: 1.5 });
+                    const canvas = document.getElementById('page-'+i);
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    page.render({
+                        canvasContext: canvas.getContext('2d'),
+                        viewport
+                    });
+                });
+            }
+        });
+
+        // Fullscreen on double-click
+        document.getElementById('flipbook').addEventListener('dblclick', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        });
+    </script>
+</body>
+</html>
